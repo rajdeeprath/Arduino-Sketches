@@ -4,7 +4,6 @@
 
 
 
-
 int LIGHT_SENSOR_PIN = A0;
 
 int PIR_SENSOR_PIN = 2;
@@ -41,31 +40,39 @@ boolean lightAlarmActive = false;
 boolean PUMP_ALARM_ACTIVE = false;
 boolean pumpAlarmActive = false;
 
-
 long lastPirHigh = 0;
 long timeNow = 0;
 
 tmElements_t tm;
+time_t current_t;
+
+tmElements_t lightOnTime;
+time_t lightOn_t;
+
+tmElements_t lightOffTime;
+time_t lightOff_t;
+
+tmElements_t pumpOnTime;
+time_t pumpOn_t;
+
+tmElements_t pumpOffTime;
+time_t pumpOff_t;
+
 
 long CONDITION_TIMEOUT = 30; // seconds
 int LIGHT_VAL_THRESHOLD = 700;
 
+boolean rtcOk;
 
-tmElements_t lightOnTime;
-tmElements_t lightOffTime;
-
-tmElements_t pumpOnTime;
-tmElements_t pumpOffTime;
 
 void initClock()
 {
   setSyncProvider(RTC.get);   // the function to get the time from the RTC
 
-
   if (timeStatus() != timeSet)
-    Serial.println("Unable to sync with the RTC");
+  Serial.println("Unable to sync with the RTC");
   else
-    Serial.println("RTC has set the system time");
+  Serial.println("RTC has set the system time");
 }
 
 
@@ -80,28 +87,29 @@ void setup() {
 
   pinMode(RELAY_PIN_2, OUTPUT);
 
-  // init light on time
-  lightOnTime.Hour = 17;
+  
+  // init light on alarm time
+  lightOnTime.Hour = 18;
   lightOnTime.Minute = 00;
-  lightOnTime.Second = 0;
+  lightOnTime.Second = 00;
 
 
-  // init light off time
-  lightOffTime.Hour = 19;
+  // init light off alarm time
+  lightOffTime.Hour = 20;
   lightOffTime.Minute = 00;
-  lightOffTime.Second = 0;
+  lightOffTime.Second = 00;
 
-
-  // init pump on time
+ 
+  // init pump on alarm time
   pumpOnTime.Hour = 20;
-  pumpOnTime.Minute = 00;
-  pumpOnTime.Second = 0;
+  pumpOnTime.Minute = 30;
+  pumpOnTime.Second = 00;
 
 
-  // init pump off time
+  // init pump off alarm time
   pumpOffTime.Hour = 23;
   pumpOffTime.Minute = 00;
-  pumpOffTime.Second = 0;
+  pumpOffTime.Second = 00;
   
 
   Serial.begin(9600);
@@ -114,14 +122,14 @@ void setup() {
 
 void loop() {
 
-
+  // calliberate sensors for the first time during startup / program reset
   if (callibrationDone == false)
   {
     int counter = 0;
 
     while (counter < callibrationTime)
     {
-      Serial.println("callibrating");
+      //Serial.println("callibrating");
       delay(1000);
       counter++;
     }
@@ -129,27 +137,40 @@ void loop() {
     callibrationDone = true;
   }
 
+  
+  // Delay
+  delay(1000);
+  
 
-  // read light sensor value
+  // Read light sensor value
   lightVal = analogRead(LIGHT_SENSOR_PIN);
 
 
-  // read pir sensor value
+  // Read pir sensor value
   pirVal = digitalRead(PIR_SENSOR_PIN);
 
 
-  // evaluate pir data
+  // Evaluate pir data
   evaluateMotionState(pirVal, PIRSTATE);
 
 
-  // evaluate light data
+  // Evaluate light data
   evaluateLightState(lightVal, LIGHTSTATE);
 
 
-  // delay
-  delay(1000);
+  // check RTC - If not ok skip time related code execution
+  rtcOk = !RTC.oscStopped();
+  if(!rtcOk) return;
+  
+
+  // Calculate alarm times W.R.T today
   timeNow = now();
-  RTC.read(tm);
+  breakTime(timeNow, tm);
+  
+  lightOn_t = getTimePostSyncAlarmYearMonthDate(tm, lightOnTime);
+  lightOff_t = getTimePostSyncAlarmYearMonthDate(tm, lightOffTime);
+  pumpOn_t = getTimePostSyncAlarmYearMonthDate(tm, pumpOnTime);
+  pumpOff_t = getTimePostSyncAlarmYearMonthDate(tm, pumpOffTime);
   
 
   /********************************************
@@ -168,9 +189,9 @@ void loop() {
   {
     if (CONDITION == true)
     {
-      Serial.print("timeNow - lastPirHigh = ");
-      Serial.print(timeNow - lastPirHigh);
-      Serial.print("\n");
+      //Serial.print("timeNow - lastPirHigh = ");
+      //Serial.print(timeNow - lastPirHigh);
+      //Serial.print("\n");
 
       if (timeNow - lastPirHigh > CONDITION_TIMEOUT)
       {
@@ -181,7 +202,9 @@ void loop() {
     else
     {
       // evaluate light alarm
-      lightAlarmActive = isAlarmPeriodActive(tm, lightOnTime, lightOffTime);  // do when on alarm
+      lightAlarmActive = isAlarmPeriodActive(timeNow, lightOn_t, lightOff_t);  // do when on alarm
+      //Serial.print("lightAlarmActive = ");
+      //Serial.println(lightAlarmActive);
       if(lightAlarmActive)
       {
         if (LIGHT_ALARM_ACTIVE == false)
@@ -201,7 +224,9 @@ void loop() {
 
 
       // evaluate pump alarm
-      pumpAlarmActive = isAlarmPeriodActive(tm, pumpOnTime, pumpOffTime);  // do when on alarm
+      pumpAlarmActive = isAlarmPeriodActive(timeNow, pumpOn_t, pumpOff_t);  // do when on alarm
+      //Serial.print("pumpAlarmActive = ");
+      //Serial.println(pumpAlarmActive);
       if(pumpAlarmActive)
       {
         if (PUMP_ALARM_ACTIVE == false)
@@ -279,11 +304,51 @@ void evaluateLightState(int lightVal, int &LIGHTSTATE)
 
 
 
-boolean isAlarmPeriodActive(tmElements_t tm, tmElements_t startTime, tmElements_t endTime)
+time_t getTimePostSyncAlarmYearMonthDate(tmElements_t source, tmElements_t &destination)
 {
-  if ((tm.Hour >= startTime.Hour && tm.Minute >= startTime.Minute) && (tm.Hour <= endTime.Hour && tm.Minute <= endTime.Minute))
-  return true;
-  else
+  destination.Year = source.Year;
+  destination.Month = source.Month;
+  destination.Day = source.Day;
+  destination.Wday = source.Wday;
+
+  return makeTime(destination);
+}
+
+
+
+/* 
+ *  Calculate to see if current time is within the range of requested start and end alarm times
+ */
+boolean isAlarmPeriodActive(time_t currentTime, time_t startTime, time_t endTime)
+{ 
+
+  long int diff_start = currentTime - startTime;
+  long int diff_end = currentTime - endTime;
+
+  if(diff_start >= 0 && diff_end <= 0)
+  {
+    return true;
+  }
+
   return false;
+}
+
+
+
+void print_time(time_t t)
+{
+  Serial.print(hour(t));
+  Serial.print(" : ");
+  Serial.print(minute(t));
+  Serial.print(" : ");
+  Serial.print(second(t));
+  Serial.print(" : ");
+  Serial.print(day(t));
+  Serial.print(" : ");
+  Serial.print(weekday(t));
+  Serial.print(" : ");
+  Serial.print(month(t));
+  Serial.print(" : ");
+  Serial.print(year(t));
 }
 
