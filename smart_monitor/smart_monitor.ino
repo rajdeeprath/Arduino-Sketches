@@ -59,7 +59,7 @@ tmElements_t pumpOffTime;
 time_t pumpOff_t;
 
 
-long CONDITION_TIMEOUT = 30; // seconds
+long CONDITION_TIMEOUT = 600; // seconds
 int LIGHT_VAL_THRESHOLD = 700;
 
 boolean rtcOk;
@@ -87,27 +87,29 @@ void setup() {
 
   pinMode(RELAY_PIN_2, OUTPUT);
 
+  pinMode(LED_PIN, OUTPUT);
+
   
-  // init light on alarm time
-  lightOnTime.Hour = 18;
-  lightOnTime.Minute = 00;
+  // init light on alarm time - evening 5:30 PM
+  lightOnTime.Hour = 17;
+  lightOnTime.Minute = 30;
   lightOnTime.Second = 00;
 
 
-  // init light off alarm time
-  lightOffTime.Hour = 20;
+  // init light off alarm time - evening 9 PM
+  lightOffTime.Hour = 21;
   lightOffTime.Minute = 00;
   lightOffTime.Second = 00;
 
  
-  // init pump on alarm time
-  pumpOnTime.Hour = 20;
-  pumpOnTime.Minute = 30;
+  // init pump on alarm time - evening 12:00 AM
+  pumpOnTime.Hour = 00;
+  pumpOnTime.Minute = 00;
   pumpOnTime.Second = 00;
 
 
-  // init pump off alarm time
-  pumpOffTime.Hour = 23;
+  // init pump off alarm time - evening 04:00 AM
+  pumpOffTime.Hour = 04;
   pumpOffTime.Minute = 00;
   pumpOffTime.Second = 00;
   
@@ -125,6 +127,7 @@ void loop() {
   // calliberate sensors for the first time during startup / program reset
   if (callibrationDone == false)
   {
+    digitalWrite(LED_PIN, HIGH);
     int counter = 0;
 
     while (counter < callibrationTime)
@@ -135,6 +138,7 @@ void loop() {
     }
 
     callibrationDone = true;
+    digitalWrite(LED_PIN, LOW);
   }
 
   
