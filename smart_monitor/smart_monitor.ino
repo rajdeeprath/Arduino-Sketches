@@ -1,7 +1,7 @@
 #include <DS3232RTC.h>    //http://github.com/JChristensen/DS3232RTC
 #include <Time.h>         //http://www.arduino.cc/playground/Code/Time  
 #include <Wire.h>         //http://arduino.cc/en/Reference/Wire (included with Arduino IDE)
-
+#include <TimeLib.h>
 
 
 int LIGHT_SENSOR_PIN = A0;
@@ -103,7 +103,7 @@ void setup() {
 
  
   // init pump on alarm time - evening 12:00 AM
-  pumpOnTime.Hour = 00;
+  pumpOnTime.Hour = 21;
   pumpOnTime.Minute = 00;
   pumpOnTime.Second = 00;
 
